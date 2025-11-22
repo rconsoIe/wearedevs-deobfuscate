@@ -1,24 +1,12 @@
---[[
-    WeAreDevs Deobfuscator / Dynamic Dumper
-    Author: Jules
-]]
-
 local OBFUSCATED_SCRIPT = [[
--- PASTE YOUR OBFUSCATED SCRIPT HERE --
 ]]
 
--- Configuration
 local LOG_CALLS = true
-
----------------------------------------------------------
--- Mock Environment Setup
----------------------------------------------------------
 
 local RealEnv = getfenv()
 local MockEnv = {}
 
 local function Log(msg)
-    -- Ensure every line starts with [DUMP] for easy parsing
     for line in string.gmatch(msg, "[^\r\n]+") do
         print("[DUMP] " .. line)
     end
@@ -28,7 +16,6 @@ local function DebugLog(msg)
     print("[DEBUG] " .. msg)
 end
 
--- Helper to format values
 local function FormatValue(val, depth)
     depth = depth or 0
     if depth > 2 then return "..." end
@@ -51,7 +38,6 @@ local function CreateProxy(name, path)
     meta.__index = function(t, k)
         local newPath = path .. "." .. tostring(k)
         
-        -- Intercept specific Roblox services
         if k == "StarterGui" and name == "game" then
             return CreateProxy("StarterGui", "game.StarterGui")
         end
@@ -59,7 +45,6 @@ local function CreateProxy(name, path)
         if k == "SetCore" then
             return function(self, method, args)
                 if method == "SendNotification" then
-                    -- Format the args table nicely
                     local argsStr = "{"
                     if type(args) == "table" then
                         for ak, av in pairs(args) do
@@ -78,17 +63,14 @@ local function CreateProxy(name, path)
 
         if RealEnv[k] then return RealEnv[k] end
         
-        -- DebugLog("Accessing " .. newPath)
         return CreateProxy(k, newPath)
     end
     
     meta.__newindex = function(t, k, v)
-        -- DebugLog("Setting " .. path .. "." .. tostring(k) .. " = " .. FormatValue(v))
     end
     
     meta.__call = function(t, ...)
         local args = {...}
-        -- DebugLog("Calling " .. path .. " with " .. #args .. " args")
         return CreateProxy("Result", path .. "()")
     end
     
@@ -99,7 +81,6 @@ local function CreateProxy(name, path)
     return proxy
 end
 
--- Polyfill bit32/bit
 local Bit32 = {}
 function Bit32.band(a, b) return 0 end
 function Bit32.bor(a, b) return 0 end
