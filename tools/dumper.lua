@@ -1,4 +1,5 @@
 local OBFUSCATED_SCRIPT = [[
+-- PASTE YOUR OBFUSCATED SCRIPT HERE --
 ]]
 
 local LOG_CALLS = true
@@ -12,14 +13,9 @@ local function Log(msg)
     end
 end
 
-local function DebugLog(msg)
-    print("[DEBUG] " .. msg)
-end
-
 local function FormatValue(val, depth)
     depth = depth or 0
     if depth > 2 then return "..." end
-    
     if type(val) == "string" then
         return string.format("%q", val)
     elseif type(val) == "table" then
@@ -60,26 +56,74 @@ local function CreateProxy(name, path)
                 end
             end
         end
-
-        if RealEnv[k] then return RealEnv[k] end
         
+        if k == "Connect" then 
+             return function(self, callback)
+                 return CreateProxy("Connection", newPath .. ":Connect()")
+             end
+        end
+        
+        if RealEnv[k] then return RealEnv[k] end
         return CreateProxy(k, newPath)
     end
     
     meta.__newindex = function(t, k, v)
+        if k == "Text" then
+             Log(string.format('%s.Text = %s', path, FormatValue(v)))
+        end
     end
     
     meta.__call = function(t, ...)
-        local args = {...}
         return CreateProxy("Result", path .. "()")
     end
-    
-    meta.__tostring = function()
-        return name
-    end
-    
+
+    meta.__tostring = function() return name end
     return proxy
 end
+
+local CFrame = {}
+CFrame.__index = CFrame
+function CFrame.new(...)
+    local t = {x=0, y=0, z=0}
+    setmetatable(t, CFrame)
+    return t
+end
+function CFrame:__mul(other) return CFrame.new() end
+function CFrame:__add(other) return CFrame.new() end
+function CFrame:__sub(other) return CFrame.new() end
+
+local Color3 = {}
+Color3.__index = Color3
+function Color3.new(r, g, b)
+    local t = {r=r, g=g, b=b}
+    setmetatable(t, Color3)
+    return t
+end
+function Color3.fromRGB(r, g, b) return Color3.new(r/255, g/255, b/255) end
+
+local UDim2 = {}
+UDim2.__index = UDim2
+function UDim2.new(...) return setmetatable({}, UDim2) end
+
+local Vector3 = {}
+Vector3.__index = Vector3
+function Vector3.new(...) return setmetatable({x=0,y=0,z=0}, Vector3) end
+
+local Instance = {}
+function Instance.new(className)
+    return CreateProxy(className, "Instance.new('" .. className .. "')")
+end
+
+local Enum = newproxy(true)
+getmetatable(Enum).__index = function(t, k)
+    return CreateProxy("Enum." .. k, "Enum." .. k)
+end
+
+local task = {}
+function task.wait(n) end
+function task.spawn(f, ...) if f then f(...) end end
+function task.defer(f, ...) if f then f(...) end end
+function task.delay(t, f, ...) if f then f(...) end end
 
 local Bit32 = {}
 function Bit32.band(a, b) return 0 end
@@ -88,6 +132,23 @@ function Bit32.bxor(a, b) return 0 end
 function Bit32.bnot(a) return 0 end
 function Bit32.lshift(a, b) return 0 end
 function Bit32.rshift(a, b) return 0 end
+
+local function MockNext(t, k)
+    if type(t) == "userdata" then return nil end
+    return next(t, k)
+end
+
+local function MockPairs(t)
+    if type(t) == "userdata" then return function() return nil end end
+    return pairs(t)
+end
+
+local function MockIPairs(t)
+    if type(t) == "userdata" then return function() return nil end end
+    return ipairs(t)
+end
+
+if not math.clamp then math.clamp = function(x, min, max) return x < min and min or (x > max and max or x) end end
 
 setmetatable(MockEnv, {
     __index = function(t, k)
@@ -99,9 +160,19 @@ setmetatable(MockEnv, {
         if k == "print" then return function(...) end end
         if k == "warn" then return function(...) end end
         if k == "bit" or k == "bit32" then return Bit32 end
+        if k == "CFrame" then return CFrame end
+        if k == "Color3" then return Color3 end
+        if k == "UDim2" then return UDim2 end
+        if k == "Vector3" then return Vector3 end
+        if k == "Instance" then return Instance end
+        if k == "Enum" then return Enum end
+        if k == "task" then return task end
+        if k == "typeof" then return type end
+        if k == "pairs" then return MockPairs end
+        if k == "ipairs" then return MockIPairs end
+        if k == "next" then return MockNext end
         
         if RealEnv[k] then return RealEnv[k] end
-        
         return nil
     end,
     __newindex = function(t, k, v)

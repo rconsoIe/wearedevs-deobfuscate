@@ -8,7 +8,7 @@ import winsound
 import base64
 
 _a1 = base64.b64decode(b'TWFkZSBieQ==').decode()
-_a2 = base64.b64decode(b'SFVUQU9TSFVTQUFORA==').decode()
+_a2 = base64.b64decode(b'SFVUQU9TSFVTQkFORA==').decode()
 _a3 = lambda: f"{_a1} {_a2}"
 _verify_attr = lambda s: _a2.lower() in s.lower()
 
