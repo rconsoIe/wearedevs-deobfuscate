@@ -183,25 +183,72 @@ local function from_bits(bits)
     return n
 end
 
-function Bit32.band(a, b)
-    local ba, bb = to_bits(a), to_bits(b)
-    local res = {}
-    for i = 1, 32 do res[i] = (ba[i] == 1 and bb[i] == 1) and 1 or 0 end
-    return from_bits(res)
+function Bit32.band(...)
+    local args = {...}
+    if #args == 0 then return 4294967295 end
+    
+    local arg_bits = {}
+    for i, arg in ipairs(args) do
+        arg_bits[i] = to_bits(arg)
+    end
+
+    local res_bits = {}
+    for i = 1, 32 do
+        local bit = 1
+        for j = 1, #args do
+            if arg_bits[j][i] == 0 then
+                bit = 0
+                break
+            end
+        end
+        res_bits[i] = bit
+    end
+    return from_bits(res_bits)
 end
 
-function Bit32.bor(a, b)
-    local ba, bb = to_bits(a), to_bits(b)
-    local res = {}
-    for i = 1, 32 do res[i] = (ba[i] == 1 or bb[i] == 1) and 1 or 0 end
-    return from_bits(res)
+function Bit32.bor(...)
+    local args = {...}
+    if #args == 0 then return 0 end
+    
+    local arg_bits = {}
+    for i, arg in ipairs(args) do
+        arg_bits[i] = to_bits(arg)
+    end
+
+    local res_bits = {}
+    for i = 1, 32 do
+        local bit = 0
+        for j = 1, #args do
+            if arg_bits[j][i] == 1 then
+                bit = 1
+                break
+            end
+        end
+        res_bits[i] = bit
+    end
+    return from_bits(res_bits)
 end
 
-function Bit32.bxor(a, b)
-    local ba, bb = to_bits(a), to_bits(b)
-    local res = {}
-    for i = 1, 32 do res[i] = (ba[i] ~= bb[i]) and 1 or 0 end
-    return from_bits(res)
+function Bit32.bxor(...)
+    local args = {...}
+    if #args == 0 then return 0 end
+    
+    local arg_bits = {}
+    for i, arg in ipairs(args) do
+        arg_bits[i] = to_bits(arg)
+    end
+
+    local res_bits = {}
+    for i = 1, 32 do
+        local bit = 0
+        for j = 1, #args do
+             if arg_bits[j][i] == 1 then
+                 bit = (bit == 0) and 1 or 0
+             end
+        end
+        res_bits[i] = bit
+    end
+    return from_bits(res_bits)
 end
 
 function Bit32.bnot(a)
