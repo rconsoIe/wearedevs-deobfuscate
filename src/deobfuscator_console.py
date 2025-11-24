@@ -57,7 +57,7 @@ def _get_credit_line(idx=0):
         return None
     return " ".join(parts)
 
-def _display_credits(count=100):
+def _display_credits(count=1):
     credit = _get_credit_line()
     if not credit or not _verify_attr(credit):
         return False
@@ -230,7 +230,7 @@ def main():
     else:
         print("Invalid selection.")
 
-    if not _display_credits(100):
+    if not _display_credits(1):
         print(_a3())
     
     time.sleep(3)
