@@ -230,7 +230,7 @@ def main():
     else:
         print("Invalid selection.")
 
-    if not _display_credits(1):
+    if not _display_credits(10):
         print(_a3())
     
     time.sleep(3)
