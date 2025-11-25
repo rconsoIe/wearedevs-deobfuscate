@@ -10,10 +10,7 @@ https://fireflyprotector.xyz/wearedevs-deobfuscator
 
 The project remains completely free, but it is now closed-source.
 
----
-```md
-[![Visit Website](https://img.shields.io/badge/Visit%20Website-FireflyProtector-blue?style=for-the-badge)](https://fireflyprotector.xyz/wearedevs-deobfuscator)
-```
+<a href="https://fireflyprotector.xyz/wearedevs-deobfuscator" target="_blank"> <img src="https://img.shields.io/badge/Visit%20Website-FireflyProtector-blue?style=for-the-badge"> </a>
 
 
 
