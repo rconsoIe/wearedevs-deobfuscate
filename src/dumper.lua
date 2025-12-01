@@ -99,6 +99,24 @@ local function CreateProxy(name, path)
                      if serviceName == "TeleportService" then return CreateProxy("TeleportService", "game.TeleportService") end
                      if serviceName == "MarketplaceService" then return CreateProxy("MarketplaceService", "game.MarketplaceService") end
                      if serviceName == "UserInputService" then return CreateProxy("UserInputService", "game.UserInputService") end
+                     if serviceName == "HttpService" then
+                        local http = CreateProxy("HttpService", "game.HttpService")
+                        local mt = getmetatable(http)
+                        local old_idx = mt.__index
+                        mt.__index = function(t, k)
+                            if k == "JSONDecode" then
+                                return function(self, str) return {} end
+                            end
+                            if k == "JSONEncode" then
+                                return function(self, tbl) return "{}" end
+                            end
+                            if k == "GenerateGUID" then
+                                return function(self) return "dead-beef-1234-5678" end
+                            end
+                            return old_idx(t, k)
+                        end
+                        return http
+                     end
                      return CreateProxy(serviceName, "game." .. tostring(serviceName))
                  end
             end
@@ -142,7 +160,13 @@ local function CreateProxy(name, path)
                      end
                  end
                  
-                 return CreateProxy("Connection", newPath .. ":Connect()")
+                 local connection = CreateProxy("Connection", newPath .. ":Connect()")
+                 local cm = getmetatable(connection)
+                 cm.__index = function(ct, ck)
+                     if ck == "Disconnect" or ck == "disconnect" then return function() end end
+                     return CreateProxy(ck, "Connection." .. ck)
+                 end
+                 return connection
              end
         end
         
@@ -198,14 +222,7 @@ local function MakeStaticLib(name, lib)
 end
 
 local CFrame = MakeStaticLib("CFrame")
-function CFrame.new(...)
-    return MakeSafeObject("CFrame", {x=0, y=0, z=0}, {
-        __tostring = function() return "0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1" end,
-        __add = function() return CFrame.new() end,
-        __sub = function() return CFrame.new() end,
-        __mul = function() return CFrame.new() end
-    })
-end
+-- Defined later after Vector3 is fixed
 
 local Color3 = MakeStaticLib("Color3")
 function Color3.new(r, g, b)
@@ -214,6 +231,7 @@ function Color3.new(r, g, b)
     })
 end
 function Color3.fromRGB(r, g, b) return Color3.new(r/255, g/255, b/255) end
+function Color3.fromHSV(h, s, v) return Color3.new(1,1,1) end
 
 local UDim2 = MakeStaticLib("UDim2")
 function UDim2.new(...) 
@@ -221,18 +239,41 @@ function UDim2.new(...)
         __tostring = function() return "{0, 0}, {0, 0}" end
     })
 end
+function UDim2.fromScale(x, y) return UDim2.new(x, 0, y, 0) end
+function UDim2.fromOffset(x, y) return UDim2.new(0, x, 0, y) end
 
 local Vector3 = MakeStaticLib("Vector3")
 function Vector3.new(...) 
-    return MakeSafeObject("Vector3", {x=0,y=0,z=0}, {
-        __tostring = function() return "0, 0, 0" end
+    -- Removed 'unit=Vector3.new()' to prevent stack overflow
+    return MakeSafeObject("Vector3", {x=0,y=0,z=0, magnitude=0}, {
+        __tostring = function() return "0, 0, 0" end,
+        __add = function() return Vector3.new() end,
+        __sub = function() return Vector3.new() end,
+        __mul = function() return Vector3.new() end,
+        __div = function() return Vector3.new() end
     })
 end
+function Vector3.fromDate(t) return Vector3.new() end
 
 local Vector2 = MakeStaticLib("Vector2")
 function Vector2.new(x, y) 
-    return MakeSafeObject("Vector2", {x=x or 0, y=y or 0}, {
-        __tostring = function(self) return string.format("Vector2.new(%s, %s)", self.x, self.y) end
+    -- Removed 'unit=Vector2.new()' to prevent stack overflow
+    return MakeSafeObject("Vector2", {x=x or 0, y=y or 0, magnitude=0}, {
+        __tostring = function(self) return string.format("Vector2.new(%s, %s)", self.x, self.y) end,
+        __add = function() return Vector2.new() end,
+        __sub = function() return Vector2.new() end,
+        __mul = function() return Vector2.new() end,
+        __div = function() return Vector2.new() end
+    })
+end
+
+-- Now define CFrame properly
+function CFrame.new(...)
+    return MakeSafeObject("CFrame", {x=0, y=0, z=0, p=Vector3.new(0,0,0), lookVector=Vector3.new(0,0,1)}, {
+        __tostring = function() return "0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1" end,
+        __add = function() return CFrame.new() end,
+        __sub = function() return CFrame.new() end,
+        __mul = function() return CFrame.new() end
     })
 end
 
@@ -477,8 +518,46 @@ local function request(options)
     }
 end
 
+-- Extended Roblox Types
+local TweenInfo = MakeStaticLib("TweenInfo")
+function TweenInfo.new(...) return MakeSafeObject("TweenInfo") end
+
+local UDim = MakeStaticLib("UDim")
+function UDim.new(...) return MakeSafeObject("UDim") end
+
+local Ray = MakeStaticLib("Ray")
+function Ray.new(...) return MakeSafeObject("Ray") end
+
+local BrickColor = MakeStaticLib("BrickColor")
+function BrickColor.new(...) return MakeSafeObject("BrickColor") end
+function BrickColor.random() return MakeSafeObject("BrickColor") end
+
+local Region3 = MakeStaticLib("Region3")
+function Region3.new(...) return MakeSafeObject("Region3") end
+
+-- Crypt Library
+local Crypt = MakeStaticLib("crypt")
+function Crypt.encrypt(d) return d end
+function Crypt.decrypt(d) return d end
+function Crypt.hash(d) return "hash" end
+function Crypt.generatekey() return "key" end
+function Crypt.base64encode(d) return d end
+function Crypt.base64decode(d) return d end
+Crypt.base64 = {
+    encode = function(d) return d end,
+    decode = function(d) return d end
+}
+Crypt.custom = {
+    encrypt = function(d) return d end,
+    decrypt = function(d) return d end
+}
+
+-- Console
+local function MockConsole(...) Log("RCONSOLE: " .. tostring(...)) end
+
 setmetatable(MockEnv, {
     __index = function(t, k)
+        -- Primary Roblox Services/Globals
         if k == "game" then return CreateProxy("game", "game") end
         if k == "workspace" then return CreateProxy("workspace", "workspace") end
         if k == "script" then return CreateProxy("script", "script") end
@@ -487,16 +566,26 @@ setmetatable(MockEnv, {
         if k == "delay" then return function(n, f) f() end end
         if k == "print" then return MockPrint end
         if k == "warn" then return MockPrint end
+        if k == "error" then return MockPrint end
+        
+        -- Libraries
         if k == "bit" or k == "bit32" then return Bit32 end
         if k == "CFrame" then return CFrame end
         if k == "Color3" then return Color3 end
         if k == "UDim2" then return UDim2 end
+        if k == "UDim" then return UDim end
         if k == "Vector3" then return Vector3 end
         if k == "Vector2" then return Vector2 end
         if k == "Drawing" then return Drawing end
         if k == "Instance" then return Instance end
         if k == "Enum" then return Enum end
         if k == "task" then return task end
+        if k == "TweenInfo" then return TweenInfo end
+        if k == "Ray" then return Ray end
+        if k == "BrickColor" then return BrickColor end
+        if k == "Region3" then return Region3 end
+        
+        -- Standard Lua
         if k == "typeof" then return type end
         if k == "pairs" then return MockPairs end
         if k == "ipairs" then return MockIPairs end
@@ -505,8 +594,9 @@ setmetatable(MockEnv, {
         if k == "table" then return MockTable end
         if k == "loadstring" then return MockLoadstring end
         if k == "load" then return MockLoadstring end
-        if k == "setclipboard" then return function(s) Log("setclipboard: " .. tostring(s)) end end
         
+        -- Executor Specific
+        if k == "setclipboard" or k == "toclipboard" then return function(s) Log("setclipboard: " .. tostring(s)) end end
         if k == "getgenv" then return function() return EnvProxy end end
         if k == "getrenv" then return function() return RealEnv end end
         if k == "checkcaller" then return function() return true end end
@@ -514,21 +604,84 @@ setmetatable(MockEnv, {
         if k == "getrawmetatable" then return function(t) return getmetatable(t) end end
         if k == "gethui" then return CreateProxy("HUI", "gethui()") end
         if k == "getnilinstances" then return function() return {} end end
+        if k == "getinstances" then return function() return {} end end
+        if k == "getgc" then return function() return {} end end
+        if k == "getreg" then return function() return {} end end
+        if k == "getloadedmodules" then return function() return {} end end
+        if k == "getconnections" then return function() return {} end end
+        if k == "firesignal" then return function() end end
+        
         if k == "setreadonly" then return function() end end
         if k == "isreadonly" then return function() return false end end
         if k == "hookfunction" then return function(f, h) return f end end
+        if k == "hookmetamethod" then return function(o, m, f) return function() end end end
         if k == "newcclosure" then return function(f) return f end end
+        if k == "islclosure" then return function() return true end end
+        if k == "iscclosure" then return function() return false end end
         if k == "getsynasset" then return function(p) return "content" end end
 
-        if k == "request" or k == "http_request" then return request end
+        if k == "request" or k == "http_request" or k == "syn" and k.request then return request end
+        
+        -- Filesystem
+        if k == "readfile" then return function(f) Log("readfile: "..tostring(f)); return "" end end
+        if k == "writefile" then return function(f, c) Log("writefile: "..tostring(f)); end end
+        if k == "appendfile" then return function(f, c) Log("appendfile: "..tostring(f)); end end
+        if k == "isfile" then return function() return false end end
+        if k == "isfolder" then return function() return false end end
+        if k == "makefolder" then return function() end end
+        if k == "delfolder" then return function() end end
+        if k == "delfile" then return function() end end
+        if k == "listfiles" then return function() return {} end end
+        
+        -- Console
+        if k == "rconsoleprint" then return MockConsole end
+        if k == "rconsoleinfo" then return MockConsole end
+        if k == "rconsolewarn" then return MockConsole end
+        if k == "rconsoleerr" then return MockConsole end
+        if k == "rconsoleclear" then return function() end end
+        if k == "rconsolename" then return function() end end
+        
+        -- Input
+        if k == "mouse1click" then return function() end end
+        if k == "mouse1press" then return function() end end
+        if k == "mouse1release" then return function() end end
+        if k == "keypress" then return function() end end
+        if k == "keyrelease" then return function() end end
+        if k == "mousemoveabs" then return function() end end
+        if k == "mousemoverel" then return function() end end
+        if k == "iswindowactive" then return function() return true end end
 
+        if k == "crypt" then return Crypt end
+        if k == "syn" then
+             return {
+                 request = request,
+                 crypt = Crypt,
+                 queue_on_teleport = function() end,
+                 protect_gui = function() end,
+                 secure_call = function(f, ...) return f(...) end
+             }
+        end
+        if k == "fluxus" then return MockEnv.syn end
+        
         if k == "debug" then
             return {
-                getinfo = function() return {} end,
+                getinfo = function() return {source="mock", short_src="mock", func=function() end} end,
                 getconstants = function() return {} end,
                 getconstant = function() return nil end,
                 getupvalues = function() return {} end,
                 getupvalue = function() return nil end,
+                getprotos = function() return {} end,
+                getproto = function() return nil end,
+                getstack = function() return {} end,
+                setstack = function() end,
+                setconstant = function() end,
+                setupvalue = function() end,
+                getregistry = function() return {} end,
+                getmetatable = function(t) return getmetatable(t) end,
+                setmetatable = function(t, m) return setmetatable(t, m) end,
+                profilebegin = function() end,
+                profileend = function() end,
+                traceback = function() return "mock traceback" end
             }
         end
         
