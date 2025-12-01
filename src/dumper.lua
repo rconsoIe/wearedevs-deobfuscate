@@ -1,4 +1,24 @@
 -- Credits: HUTAOSHUSBAND
+-- SECURITY PATCH START
+-- Remove dangerous globals to prevent RCE from the obfuscated script
+if os then 
+    os.execute = nil 
+    os.remove = nil 
+    os.rename = nil 
+    os.exit = nil 
+    os.tmpname = nil 
+    os.getenv = nil
+    os.setlocale = nil
+end
+io = nil
+package = nil
+lfs = nil
+require = nil
+module = nil
+dofile = nil
+loadfile = nil
+-- SECURITY PATCH END
+
 local OBFUSCATED_SCRIPT = [[
 -- PASTE YOUR OBFUSCATED SCRIPT HERE --
 ]]
@@ -41,9 +61,10 @@ local function CreateProxy(name, path)
         if name == "game" then
             if k == "PlaceId" then return 123456 end
             if k == "JobId" then return "deadbeef-1234-5678-9abc-def012345678" end
-            if k == "StarterGui" then
-                return CreateProxy("StarterGui", "game.StarterGui")
-            end
+            if k == "StarterGui" then return CreateProxy("StarterGui", "game.StarterGui") end
+            if k == "CoreGui" then return CreateProxy("CoreGui", "game.CoreGui") end
+            if k == "Players" then return CreateProxy("Players", "game.Players") end
+
             if k == "HttpGet" or k == "HttpGetAsync" then
                 return function(self, url)
                     Log(string.format('game:HttpGet("%s")', tostring(url)))
@@ -53,6 +74,31 @@ local function CreateProxy(name, path)
             if k == "GetService" then
                  return function(self, serviceName)
                      Log(string.format('game:GetService("%s")', tostring(serviceName)))
+                     if serviceName == "Players" then
+                         local players = CreateProxy(serviceName, "game." .. tostring(serviceName))
+                         local mt = getmetatable(players)
+                         mt.__index = function(t, k)
+                             if k == "LocalPlayer" then
+                                 local player = CreateProxy("LocalPlayer", "game.Players.LocalPlayer")
+                                 local player_mt = getmetatable(player)
+                                 player_mt.__index = function(pt, pk)
+                                     if pk == "Name" then return "LocalPlayer" end
+                                     if pk == "UserId" then return 1 end
+                                     if pk == "Character" then return CreateProxy("Character", "game.Players.LocalPlayer.Character") end
+                                     return CreateProxy(pk, "game.Players.LocalPlayer." .. pk)
+                                 end
+                                 return player
+                             end
+                             return CreateProxy(k, "game.Players." .. k)
+                         end
+                         return players
+                     end
+                     if serviceName == "ReplicatedStorage" then return CreateProxy("ReplicatedStorage", "game.ReplicatedStorage") end
+                     if serviceName == "Lighting" then return CreateProxy("Lighting", "game.Lighting") end
+                     if serviceName == "CoreGui" then return CreateProxy("CoreGui", "game.CoreGui") end
+                     if serviceName == "TeleportService" then return CreateProxy("TeleportService", "game.TeleportService") end
+                     if serviceName == "MarketplaceService" then return CreateProxy("MarketplaceService", "game.MarketplaceService") end
+                     if serviceName == "UserInputService" then return CreateProxy("UserInputService", "game.UserInputService") end
                      return CreateProxy(serviceName, "game." .. tostring(serviceName))
                  end
             end
@@ -201,8 +247,27 @@ function Drawing.new(type)
 end
 
 local Instance = MakeStaticLib("Instance")
+local ClassProperties = {
+    Part = { Size = Vector3.new(1,1,1), Position = Vector3.new(0,0,0) },
+    Humanoid = { Health = 100, MaxHealth = 100 },
+    ScreenGui = { DisplayOrder = 0 },
+    Frame = { Size = UDim2.new(0,100,0,100) },
+    TextLabel = { Text = "" }
+}
+
 function Instance.new(className)
-    return CreateProxy(className, "Instance.new('" .. className .. "')")
+    local path = "Instance.new('" .. className .. "')"
+    local proxy = CreateProxy(className, path)
+    local props = ClassProperties[className]
+    if props then
+        local mt = getmetatable(proxy)
+        local base_index = mt.__index
+        mt.__index = function(t, k)
+            if props[k] then return props[k] end
+            return base_index(t, k)
+        end
+    end
+    return proxy
 end
 
 local Enum = newproxy(true)
@@ -446,14 +511,56 @@ setmetatable(MockEnv, {
         if k == "getrenv" then return function() return RealEnv end end
         if k == "checkcaller" then return function() return true end end
         if k == "identifyexecutor" or k == "getexecutorname" then return function() return "Synapse X", "2.0.0" end end
-        
+        if k == "getrawmetatable" then return function(t) return getmetatable(t) end end
+        if k == "gethui" then return CreateProxy("HUI", "gethui()") end
+        if k == "getnilinstances" then return function() return {} end end
+        if k == "setreadonly" then return function() end end
+        if k == "isreadonly" then return function() return false end end
+        if k == "hookfunction" then return function(f, h) return f end end
+        if k == "newcclosure" then return function(f) return f end end
+        if k == "getsynasset" then return function(p) return "content" end end
+
         if k == "request" or k == "http_request" then return request end
 
-        if RealEnv[k] then return RealEnv[k] end
+        if k == "debug" then
+            return {
+                getinfo = function() return {} end,
+                getconstants = function() return {} end,
+                getconstant = function() return nil end,
+                getupvalues = function() return {} end,
+                getupvalue = function() return nil end,
+            }
+        end
+        
+        -- Explicitly block dangerous libraries
+        if k == "io" or k == "os" or k == "lfs" or k == "package" then
+            return nil
+        end
+        
+        -- Block garbage collector
+        if k == "collectgarbage" then
+            return function() return 0 end
+        end
+
+        -- Do NOT fall back to the real environment for safety.
+        -- Only allow access to a curated list of safe globals.
+        local safelist = {
+            "assert", "error", "ipairs", "next", "pairs", "pcall", "print", "select",
+            "tonumber", "tostring", "type", "unpack", "_VERSION", "xpcall",
+            "coroutine", "string", "table", "math",
+            "utf8" -- Lua 5.3+ but safe to include
+        }
+        for _, safe_k in ipairs(safelist) do
+            if k == safe_k then
+                return RealEnv[k]
+            end
+        end
+        
         return nil
     end,
     __newindex = function(t, k, v)
-        RealEnv[k] = v
+        -- Allow setting globals within the mock environment only, not the real one.
+        rawset(t, k, v)
     end
 })
 

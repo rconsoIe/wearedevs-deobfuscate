@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import shutil
 import time
+import argparse
 try:
     import winsound
 except ImportError:
@@ -24,26 +25,14 @@ _a3 = lambda: f"{_a1} {_a2}"
 _verify_attr = lambda s: _a2.lower() in s.lower()
 
 def beep():
-    try:
-        winsound.Beep(2000, 50)
-    except:
-        pass
-
-def get_resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
+    # Non-interactive, so we don't need beeps.
+    pass
 
 def find_lua_executable():
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
-    else:
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        
-    local_lua = os.path.join(base_path, "lua.exe")
-    if os.path.exists(local_lua):
-        return local_lua
+        local_lua = os.path.join(base_path, "lua.exe")
+        if os.path.exists(local_lua): return local_lua
         
     for cmd in ["lua5.1", "lua", "luajit"]:
         path = shutil.which(cmd)
@@ -51,53 +40,35 @@ def find_lua_executable():
             return path
     return None
 
-def _get_credit_line(idx=0):
-    parts = [_a1, _a2]
-    if not all(parts):
-        return None
-    return " ".join(parts)
-
-def _display_credits(count=1):
-    credit = _get_credit_line()
-    if not credit or not _verify_attr(credit):
-        return False
-    for _ in range(count):
-        print(credit)
-    return True
-
 def main():
-    os.system('cls' if os.name == 'nt' else 'clear')
+    parser = argparse.ArgumentParser(description="WeAreDevs Deobfuscator - Command Line Interface")
+    parser.add_argument("input", help="Path to the input .lua file")
+    parser.add_argument("output", help="Path to save the deobfuscated output")
+    parser.add_argument("mode", choices=['dump', 'decompile'], help="The deobfuscation mode to use ('dump' or 'decompile')")
     
-    print("file: ", end='', flush=True)
-    try:
-        target_path = input().strip()
-    except EOFError:
-        return
+    args = parser.parse_args()
+    
+    target_path = args.input
+    output_path = args.output
+    choice = '1' if args.mode == 'dump' else '2'
 
-    if target_path.startswith('"') and target_path.endswith('"'):
-        target_path = target_path[1:-1]
-        
     if not os.path.exists(target_path):
-        print("File not found!")
-        time.sleep(3)
-        return
+        print("FATAL: File not found!", file=sys.stderr)
+        sys.exit(1)
 
-    beep()
-
-    # Menu Selection
-    print("\nSelect Mode:")
-    print("1. Dump Constants")
-    print("2. Deobfuscate (might not fully work)")
-    print("choice: ", end='', flush=True)
-    
     try:
-        choice = input().strip()
-    except EOFError:
-        return
-        
+        with open(target_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+            if "FireflyProtect" in content:
+                print("We cannot deobfuscate FireflyProtector.", file=sys.stderr)
+                sys.exit(1)
+    except Exception as e:
+        print(f"FATAL: Could not read input file: {e}", file=sys.stderr)
+        sys.exit(1)
+
     if choice == '1':
         # Dump Constants Mode
-        print("\nProcessing strings...")
+        print("Processing strings...")
         try:
             with open(target_path, 'r', encoding='latin1') as f:
                 content = f.read()
@@ -105,55 +76,48 @@ def main():
             decrypted = get_decrypted_strings(content)
             
             if decrypted:
-                for s in decrypted:
-                    print(s)
-                    beep()
-                    time.sleep(0.001)
-                print("\nDump complete.")
+                with open(output_path, 'w', encoding='utf-8') as out_f:
+                    for s in decrypted:
+                        out_f.write(s + '\n')
+                print(f"Dump complete. Saved to {output_path}")
             else:
                 print("No strings found or decryption failed.")
-                
+                with open(output_path, 'w', encoding='utf-8') as out_f:
+                    out_f.write("-- No strings found or decryption failed --")
+            
         except Exception as e:
-            print(f"Error processing strings: {e}")
+            print(f"FATAL: Error processing strings: {e}", file=sys.stderr)
+            sys.exit(1)
             
     elif choice == '2':
         # Deobfuscate Mode (Existing Logic)
         lua_exec = find_lua_executable()
         if not lua_exec:
-            print("Error: No Lua interpreter found. Please install lua5.1, lua, or luajit, or place lua.exe next to this executable.")
-            time.sleep(5)
-            return
+            print("FATAL: No Lua interpreter found. Please install lua5.1, lua, or luajit.", file=sys.stderr)
+            sys.exit(1)
+        
+        print(f"Using Lua interpreter: {lua_exec}")
 
-        beep()
-
-        if getattr(sys, 'frozen', False):
-             dumper_path = get_resource_path('dumper.lua')
-        else:
-             tools_dir = os.path.dirname(os.path.abspath(__file__))
-             dumper_path = os.path.join(tools_dir, 'dumper.lua')
+        tools_dir = os.path.dirname(os.path.abspath(__file__))
+        dumper_path = os.path.join(tools_dir, 'dumper.lua')
 
         if not os.path.exists(dumper_path):
-             print(f"Error: dumper.lua not found at {dumper_path}")
-             time.sleep(5)
-             return
+             print(f"FATAL: dumper.lua not found at {dumper_path}", file=sys.stderr)
+             sys.exit(1)
 
         try:
             with open(dumper_path, 'rb') as f:
                 template = f.read()
         except Exception as e:
-            print(f"Error reading dumper template: {e}")
-            time.sleep(3)
-            return
+            print(f"FATAL: Error reading dumper template: {e}", file=sys.stderr)
+            sys.exit(1)
 
         try:
             with open(target_path, 'rb') as f:
                 obfuscated_content = f.read()
         except Exception as e:
-            print(f"Error reading file: {e}")
-            time.sleep(3)
-            return
-
-        beep()
+            print(f"FATAL: Error reading file: {e}", file=sys.stderr)
+            sys.exit(1)
 
         placeholder = b"-- PASTE YOUR OBFUSCATED SCRIPT HERE --"
         
@@ -166,74 +130,59 @@ def main():
                 break
             level += 1
             
-        match_start = template.find(b"local OBFUSCATED_SCRIPT =")
         ph_start = template.find(placeholder)
         
-        if match_start == -1 or ph_start == -1:
-            print("Internal Error: Template structure corrupted.")
-            time.sleep(3)
-            return
+        if ph_start == -1:
+            print("FATAL: Internal Error: Template structure corrupted.", file=sys.stderr)
+            sys.exit(1)
 
-        if b"]]" not in obfuscated_content:
-            final_script = template.replace(placeholder, obfuscated_content)
-        else:
-            open_bracket_pos = template.rfind(b"[[", 0, ph_start)
-            close_bracket_pos = template.find(b"]]", ph_start)
+        open_bracket_pos = template.rfind(b"[[", 0, ph_start)
+        close_bracket_pos = template.find(b"]]", ph_start)
+        
+        if open_bracket_pos == -1 or close_bracket_pos == -1:
+            print("FATAL: Internal Error: Could not find delimiters in template.", file=sys.stderr)
+            sys.exit(1)
             
-            if open_bracket_pos == -1 or close_bracket_pos == -1:
-                print("Internal Error: Could not find delimiters in template.")
-                time.sleep(3)
-                return
-                
-            part1 = template[:open_bracket_pos]
-            part2 = template[close_bracket_pos+2:]
-            
-            final_script = part1 + start_delim + b"\n" + obfuscated_content + b"\n" + end_delim + part2
-
-        beep()
+        part1 = template[:open_bracket_pos]
+        part2 = template[close_bracket_pos+2:]
+        
+        final_script = part1 + start_delim + b"\n" + obfuscated_content + b"\n" + end_delim + part2
 
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.lua', delete=False) as tmp:
             tmp.write(final_script)
             tmp_path = tmp.name
         
         try:
-            result = subprocess.run([lua_exec, tmp_path], capture_output=True)
+            print("Executing dynamic analysis with Lua...")
+            result = subprocess.run([lua_exec, tmp_path], capture_output=True, timeout=30)
             
             stdout = result.stdout.decode('utf-8', errors='replace')
             stderr = result.stderr.decode('utf-8', errors='replace')
             
-            dumped_lines = []
-            for line in stdout.splitlines():
-                if "[DUMP]" in line:
-                    dumped_lines.append(line.replace("[DUMP] ", ""))
+            dumped_lines = [line.replace("[DUMP] ", "") for line in stdout.splitlines() if "[DUMP]" in line]
             
-            if stderr:
-                 if "Error" in stderr or "stack traceback" in stderr:
-                     print(f"Lua Error: {stderr}")
+            if stderr and ("Error" in stderr or "stack traceback" in stderr):
+                 print(f"Lua Error: {stderr}", file=sys.stderr)
             
             if dumped_lines:
-                base, ext = os.path.splitext(target_path)
-                output_path = f"{base}_deobfuscated{ext}"
-                
                 with open(output_path, 'w', encoding='utf-8') as out_f:
                     out_f.write("\n".join(dumped_lines))
-                
-                print(f"Saved to {output_path}")
-                beep()
+                print(f"Deobfuscation successful. Saved to {output_path}")
             else:
                 print("No deobfuscated content found.")
+                with open(output_path, 'w', encoding='utf-8') as out_f:
+                    out_f.write("-- No dynamic output was captured --")
                 
+        except subprocess.TimeoutExpired:
+            print("FATAL: Lua script execution timed out after 30 seconds.", file=sys.stderr)
+            sys.exit(1)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
     
     else:
-        print("Invalid selection.")
-
-    if not _display_credits(10):
-        print(_a3())
-    
-    time.sleep(3)
+        print("FATAL: Invalid mode selected.", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

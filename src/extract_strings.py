@@ -1,10 +1,30 @@
 import re
 import sys
 import os
+import ast
 
 def solve_expr(expr):
+    """
+    Safely evaluate a simple arithmetic expression.
+    """
     try:
-        return eval(expr)
+        expr = expr.strip()
+        # Parse the expression into an AST
+        node = ast.parse(expr, mode='eval')
+        
+        # Verify that the AST only contains safe nodes
+        for subnode in ast.walk(node):
+            if not isinstance(subnode, (ast.Expression, ast.BinOp, ast.UnaryOp, 
+                                        ast.Constant, ast.Num, ast.Add, ast.Sub, 
+                                        ast.Mult, ast.Div, ast.Mod, ast.Pow, 
+                                        ast.USub, ast.UAdd)):
+                 # If we encounter anything unsafe (like Call, Attribute, Name, etc.), fail safely
+                 return 0
+        
+        # Safe to evaluate using eval since we checked the structure,
+        # but to be extra safe, we can limit the globals/locals.
+        # Although ast.literal_eval is safer, it doesn't support operators.
+        return eval(expr, {"__builtins__": None}, {})
     except Exception as e:
         return 0
 
