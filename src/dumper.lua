@@ -19,6 +19,15 @@ dofile = nil
 loadfile = nil
 -- SECURITY PATCH END
 
+local old_len = string.len
+string.len = function(v)
+    return old_len(tostring(v))
+end
+local old_sub = string.sub
+string.sub = function(v, a, b)
+    return old_sub(tostring(v), a, b)
+end
+
 local OBFUSCATED_SCRIPT = [[
 -- PASTE YOUR OBFUSCATED SCRIPT HERE --
 ]]
